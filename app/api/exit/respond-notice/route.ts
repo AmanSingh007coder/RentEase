@@ -7,12 +7,19 @@ import User from "@/models/User";
 export async function PUT(request: Request) {
   try {
     await connectToDatabase();
-    const { exitId, status, isTenantSatisfied } = await request.json();
+    const { exitId, status, isTenantSatisfied, moveOutDate} = await request.json();
 
-    // 1. Update the Exit Record and get tenant details
+// 1. Update the Exit Record
+    const updateData: any = { status, isTenantSatisfied };
+    
+    // ✅ FIX: If a new date is provided (via reschedule or acceptance), update it in DB
+    if (moveOutDate) {
+      updateData.moveOutDate = new Date(moveOutDate);
+    }
+
     const updatedExit = await ExitProcess.findByIdAndUpdate(
       exitId,
-      { status, isTenantSatisfied },
+      updateData,
       { new: true }
     ).populate("tenantId");
 

@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // ✅ Ensure this is here!
-  role: { type: String, enum: ["owner", "tenant"], required: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ["owner", "tenant", "pending"], required: true },
   propertyId: { type: mongoose.Schema.Types.ObjectId, ref: "Property" },
   // ✅ This is the new field we added for the payment gatekeeper
   isOnboarded: { type: Boolean, default: false }, 

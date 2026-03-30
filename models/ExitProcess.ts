@@ -12,14 +12,16 @@ const ExitProcessSchema = new mongoose.Schema({
   status: { 
     type: String, 
     enum: [
-      "notice_served", 
-      "photos_submitted", 
-      "physical_inspection_required", 
-      "physical_inspection_done", 
-      "inspection_completed", 
-      "settled", 
-      "archived"
-    ],
+          "notice_served", 
+          "notice_rescheduled", // Added
+          "notice_accepted",    // Added
+          "photos_submitted", 
+          "physical_inspection_required", 
+          "physical_inspection_done", 
+          "inspection_completed", 
+          "settled", 
+          "archived"
+        ],
     default: "notice_served"
   },
 

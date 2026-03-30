@@ -6,11 +6,14 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function MoveOutGallery() {
   const [slots, setSlots] = useState([]);
-  const [uploads, setUploads] = useState<any>({});
+  // ✅ FIX: Track uploads by index to prevent category collisions
+  const [uploads, setUploads] = useState<{ [key: number]: string }>({});
   const [loading, setLoading] = useState(true);
   const [exitId, setExitId] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("");
+  
+  // ✅ Track index and name separately
+  const [activeSlot, setActiveSlot] = useState<{ index: number; name: string } | null>(null);
   const [error, setError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -25,17 +28,16 @@ export default function MoveOutGallery() {
         
         if (propRes.ok && propData.property) {
           setExitId(propData.property.activeExitId);
-          // ✅ Using plural 'inspections' per your project structure
           const moveInRes = await fetch(`/api/inspections/get-move-in?propertyId=${propData.property._id}`);
           const moveInData = await moveInRes.json();
           if (moveInRes.ok) {
             setSlots(moveInData.slots || []);
           } else {
-            setError("No move-in baseline found.");
+            setError("No move-in baseline found in vault.");
           }
         }
       } catch (err) {
-        setError("Failed to sync with the database.");
+        setError("Vault synchronization failed.");
       } finally {
         setLoading(false);
       }
@@ -43,8 +45,8 @@ export default function MoveOutGallery() {
     initialize();
   }, []);
 
-  const startCamera = async (category: string) => {
-    setActiveCategory(category);
+  const startCamera = async (index: number, category: string) => {
+    setActiveSlot({ index, name: category });
     setIsCapturing(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -52,17 +54,15 @@ export default function MoveOutGallery() {
         audio: false 
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
-      alert("Camera access denied. Check your browser permissions.");
+      alert("Camera access denied.");
       setIsCapturing(false);
     }
   };
 
   const capturePhoto = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || activeSlot === null) return;
     const canvas = document.createElement("canvas");
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
@@ -70,7 +70,9 @@ export default function MoveOutGallery() {
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imgData = canvas.toDataURL("image/jpeg", 0.8);
-      setUploads((prev: any) => ({ ...prev, [activeCategory]: imgData }));
+      
+      // ✅ FIX: Save using the unique INDEX
+      setUploads(prev => ({ ...prev, [activeSlot.index]: imgData }));
       stopCamera();
     }
   };
@@ -80,10 +82,16 @@ export default function MoveOutGallery() {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
     setIsCapturing(false);
+    setActiveSlot(null);
   };
 
   const handleSubmit = async () => {
-    const photoArray = Object.keys(uploads).map(area => ({ area, url: uploads[area] }));
+    // ✅ Map through slots using index to build the final submission array
+    const photoArray = slots.map((slot: any, index: number) => ({
+      area: slot.category,
+      url: uploads[index]
+    }));
+
     const res = await fetch("/api/exit/submit-photos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -111,42 +119,46 @@ export default function MoveOutGallery() {
     <div className="p-6 md:p-12 max-w-5xl mx-auto pb-40">
       <header className="mb-12">
         <h1 className="text-4xl font-black text-[#1F2937] tracking-tighter">Exit Condition Audit</h1>
-        <p className="text-gray-400 mt-2 font-medium">Capture proof that the property matches its move-in condition.</p>
+        <p className="text-gray-400 mt-2 font-medium italic">Match your move-out condition with the baseline photos.</p>
       </header>
 
       <div className="grid grid-cols-1 gap-12">
-        {slots.map((item: any) => (
-          <div key={item.category} className="bg-white border border-gray-100 rounded-[48px] p-8 md:p-10 shadow-sm">
-            <h3 className="text-2xl font-black uppercase mb-8 tracking-tight">{item.category}</h3>
+        {slots.map((item: any, index: number) => (
+          <div key={index} className="bg-white border border-gray-100 rounded-[48px] p-8 md:p-10 shadow-sm relative overflow-hidden">
+            <h3 className="text-2xl font-black uppercase mb-8 tracking-tight flex items-center gap-3">
+               <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-400">{index + 1}</span>
+               {item.category}
+            </h3>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              {/* Baseline Reference (Move-In) */}
+              {/* Baseline Reference */}
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Baseline Condition</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Baseline (Move-In)</p>
                 <img src={item.url} className="w-full h-72 object-cover rounded-[32px] grayscale opacity-40 border border-gray-50 shadow-inner" alt="Baseline" />
               </div>
               
-              {/* Current Evidence (Aman's Shot) */}
+              {/* Current Evidence */}
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Your Current Proof</p>
-                {uploads[item.category] ? (
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Your Move-Out Proof</p>
+                {uploads[index] ? (
                   <div className="relative rounded-[32px] overflow-hidden border-4 border-emerald-50 shadow-xl">
-                    <img src={uploads[item.category]} className="w-full h-72 object-cover" alt="Proof" />
+                    <img src={uploads[index]} className="w-full h-72 object-cover" alt="Proof" />
                     <button 
-                      onClick={() => startCamera(item.category)} 
-                      className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl text-[10px] font-bold shadow-lg"
+                      onClick={() => startCamera(index, item.category)} 
+                      className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl text-[10px] font-bold shadow-lg hover:bg-white transition-colors"
                     >
-                      Retake
+                      Retake Photo
                     </button>
                   </div>
                 ) : (
                   <button 
-                    onClick={() => startCamera(item.category)} 
+                    onClick={() => startCamera(index, item.category)} 
                     className="w-full h-72 border-4 border-dashed border-gray-50 rounded-[32px] flex flex-col items-center justify-center gap-4 hover:border-blue-200 hover:bg-blue-50/50 transition-all group"
                   >
                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
                       <Camera size={28} />
                     </div>
-                    <span className="text-xs font-bold text-gray-400 uppercase">Open Camera for {item.category}</span>
+                    <span className="text-xs font-bold text-gray-400 uppercase">Open Camera</span>
                   </button>
                 )}
               </div>
@@ -161,7 +173,7 @@ export default function MoveOutGallery() {
           disabled={Object.keys(uploads).length < slots.length}
           className="w-full py-6 bg-[#1F2937] text-white rounded-[32px] font-bold text-sm shadow-2xl flex items-center justify-center gap-3 hover:bg-black transition-all disabled:opacity-20 active:scale-95"
         >
-          Submit Verified Report <ArrowRight size={20} />
+          Submit Audit Report <ArrowRight size={20} />
         </button>
       </div>
 
@@ -170,55 +182,31 @@ export default function MoveOutGallery() {
         {isCapturing && (
           <motion.div 
             className="fixed inset-0 z-[100] bg-black flex flex-col"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
-            {/* Overlay Header */}
             <div className="p-6 flex justify-between items-center text-white z-10">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <h3 className="font-bold uppercase tracking-widest text-[10px]">Live Audit: {activeCategory}</h3>
+                <h3 className="font-bold uppercase tracking-widest text-[10px]">Live Audit: {activeSlot?.name}</h3>
               </div>
-              <button onClick={stopCamera} className="p-2 bg-white/10 rounded-full">
-                <X size={24} />
-              </button>
+              <button onClick={stopCamera} className="p-2 bg-white/10 rounded-full"><X size={24} /></button>
             </div>
 
-            {/* Video Feed */}
             <div className="flex-1 relative overflow-hidden bg-gray-900 flex items-center justify-center">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className="w-full h-full object-cover" 
-              />
-              {/* Centering Grid (Optional UX) */}
+              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
               <div className="absolute inset-0 border-[1px] border-white/10 pointer-events-none grid grid-cols-3 grid-rows-3">
-                <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
-                <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
-                <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
+                {[...Array(9)].map((_, i) => <div key={i} className="border-[0.5px] border-white/5" />)}
               </div>
             </div>
 
-            {/* Shutter Controls */}
             <div className="h-40 bg-black flex items-center justify-center relative">
-              <div className="flex items-center gap-12">
-                 <div className="w-10 h-10 rounded-full bg-white/5" />
-                 
-                 {/* THE SHUTTER BUTTON */}
-                 <button 
-                  onClick={capturePhoto}
-                  className="w-20 h-20 bg-white rounded-full border-[6px] border-gray-800 shadow-xl active:scale-90 transition-all flex items-center justify-center"
-                 >
-                   <div className="w-14 h-14 rounded-full border-2 border-black/10" />
-                 </button>
-
-                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white/40">
-                    <RefreshCw size={20} />
-                 </div>
-              </div>
-              <p className="absolute bottom-6 text-[8px] font-black uppercase text-white/30 tracking-[0.4em]">Tap to Capture Evidence</p>
+               <button 
+                onClick={capturePhoto}
+                className="w-20 h-20 bg-white rounded-full border-[6px] border-gray-800 shadow-xl active:scale-90 transition-all flex items-center justify-center"
+               >
+                 <div className="w-14 h-14 rounded-full border-2 border-black/10" />
+               </button>
+               <p className="absolute bottom-6 text-[8px] font-black uppercase text-white/30 tracking-[0.4em]">Tap to Capture Condition</p>
             </div>
           </motion.div>
         )}

@@ -85,12 +85,21 @@ export default function TenantExitManager() {
 
   if (loading) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
-  // Temporal Logic
+// 🕒 TEMPORAL PIPELINE LOGIC
   const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to start of day
+
   const moveOutDate = exitData?.moveOutDate ? new Date(exitData.moveOutDate) : null;
-  const auditUnlockDate = moveOutDate ? new Date(moveOutDate.getTime() - 7 * 24 * 60 * 60 * 1000) : null;
+  
+  // Calculate the unlock date (Move-out minus 7 days)
+  const auditUnlockDate = moveOutDate ? new Date(moveOutDate.getTime() - (7 * 24 * 60 * 60 * 1000)) : null;
+  if (auditUnlockDate) auditUnlockDate.setHours(0, 0, 0, 0);
+
   const canStartAudit = auditUnlockDate ? today >= auditUnlockDate : false;
-  const daysUntilAudit = auditUnlockDate ? Math.ceil((auditUnlockDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  
+  // Calculate remaining days for the UI
+  const diffTime = auditUnlockDate ? auditUnlockDate.getTime() - today.getTime() : 0;
+  const daysUntilAudit = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
   // --- STAGE 0: INITIAL FORM ---
   if (!exitData) {
@@ -157,22 +166,37 @@ export default function TenantExitManager() {
         </div>
       )}
 
-      {/* CASE 3: NOTICE ACCEPTED */}
-      {exitData.status === "notice_accepted" && (
-        <div className="bg-white border border-gray-100 rounded-[40px] p-12 text-center shadow-sm">
-          <CheckCircle className="text-emerald-500 mx-auto mb-6" size={40} /><h2 className="text-2xl font-bold">Move-Out Scheduled</h2>
-          <p className="text-gray-400 text-sm mt-2 mb-10">Confirmed for <b>{moveOutDate?.toLocaleDateString()}</b></p>
-          {canStartAudit ? (
-            <button onClick={() => window.location.href = "/dashboard-tenant/exit/gallery"} className="px-10 py-6 bg-blue-600 text-white rounded-[32px] font-bold text-xs flex items-center gap-3 mx-auto shadow-xl hover:bg-blue-700 transition-all">Start Digital Condition Audit <ArrowRight size={18} /></button>
-          ) : (
-            <div className="p-10 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-100 max-w-sm mx-auto">
-              <ShieldCheck className="mx-auto mb-4 text-gray-300" size={32} />
-              <p className="text-xl font-black text-gray-800 uppercase text-xs">Audit Locked</p>
-              <p className="text-sm font-bold text-gray-400">Unlocks in {daysUntilAudit} days</p>
-            </div>
-          )}
+{/* CASE 3: NOTICE ACCEPTED (The Pipeline Lock) */}
+  {exitData.status === "notice_accepted" && (
+    <div className="bg-white border border-gray-100 rounded-[40px] p-12 text-center shadow-sm">
+      <CheckCircle className="text-emerald-500 mx-auto mb-6" size={40} />
+      <h2 className="text-2xl font-bold text-[#1F2937]">Move-Out Scheduled</h2>
+      <p className="text-gray-400 text-sm mt-2 mb-10 italic">
+        Final Date Confirmed: <b className="text-black">{moveOutDate?.toLocaleDateString()}</b>
+      </p>
+
+      {canStartAudit ? (
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+          <p className="text-blue-600 text-xs font-black uppercase tracking-widest mb-6">Audit Pipeline Active</p>
+          <button 
+            onClick={() => router.push("/dashboard-tenant/exit/gallery")} 
+            className="px-10 py-6 bg-blue-600 text-white rounded-[32px] font-bold text-xs flex items-center gap-3 mx-auto shadow-xl hover:bg-blue-700 active:scale-95 transition-all"
+          >
+            Start Digital Condition Audit <ArrowRight size={18} />
+          </button>
+        </motion.div>
+      ) : (
+        <div className="p-10 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-100 max-w-sm mx-auto">
+          <ShieldCheck className="mx-auto mb-4 text-gray-300" size={32} />
+          <p className="text-gray-800 uppercase text-xs font-black tracking-widest">Audit Protocol Locked</p>
+          <p className="text-sm font-bold text-gray-400 mt-2">
+            The Digital Witness opens <span className="text-blue-600">7 days</span> before exit. 
+            <br/> Come back in <span className="text-black font-black">{daysUntilAudit} days</span>.
+          </p>
         </div>
       )}
+    </div>
+  )}
 
       {/* CASE 4: PHOTOS SUBMITTED */}
       {exitData.status === "photos_submitted" && (

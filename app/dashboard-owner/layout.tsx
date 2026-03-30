@@ -69,34 +69,48 @@ const handleSubmit = async () => {
   setLoading(true);
   try {
     // 1. Determine if this is a NEW property or an EDIT
-    const isEditing = !!editingProperty; 
+    const isEditing = !!(editingProperty && editingProperty._id); 
     const endpoint = isEditing ? "/api/properties/update" : "/api/properties/create";
     const method = isEditing ? "PUT" : "POST";
+
+    // 2. Build the Clean Payload
+    const payload = {
+      address: propertyData.address,
+      rentAmount: Number(propertyData.rentAmount),
+      depositAmount: Number(propertyData.depositAmount),
+      ownerId: localStorage.getItem("userId"),
+      roomDetails: { 
+        rooms: Number(propertyData.rooms), 
+        furnishing: propertyData.furnishing 
+      },
+      guidelines: typeof propertyData.guidelines === 'string' 
+        ? propertyData.guidelines.split(",").map(s => s.trim()) 
+        : propertyData.guidelines,
+      images: propertyData.images || [],
+      
+      // ✅ CRITICAL FIX: Only include propertyId if we are actually editing
+      ...(isEditing && { propertyId: editingProperty._id }) 
+    };
 
     const res = await fetch(endpoint, {
       method: method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...propertyData,
-        // 2. If editing, we MUST send the property ID so Mongo knows which one to fix
-        propertyId: isEditing ? editingProperty._id : null,
-        ownerId: localStorage.getItem("userId"),
-        roomDetails: { 
-          rooms: propertyData.rooms, 
-          furnishing: propertyData.furnishing 
-        }
-      }),
+      body: JSON.stringify(payload),
     });
 
+    const data = await res.json();
+
     if (res.ok) {
+      alert(isEditing ? "Asset Updated successfully!" : "New Asset Created!");
       closeModal();
-      window.location.reload(); 
+      window.location.reload(); // Refresh the portfolio list
     } else {
-      const errorData = await res.json();
-      alert(errorData.error || "Save failed");
+      // This will now catch the "Property ID required" error if something goes wrong
+      alert(data.error || "Save failed. Please check all fields.");
     }
   } catch (err) {
-    alert("System error. Check console.");
+    console.error("SUBMIT_ERROR:", err);
+    alert("Vault connection failed. Check your network.");
   } finally {
     setLoading(false);
   }
@@ -224,7 +238,10 @@ function Sidebar({ userName, openModal, pathname }: { userName: string, openModa
         </nav>
       </div>
       <div className="pt-6 border-t border-white/10">
-        <button onClick={openModal} className="w-full flex items-center justify-center gap-3 bg-[#0052CC] text-white p-4 rounded-2xl font-bold text-xs mb-6 hover:bg-[#0041a3] transition-all">
+        <button 
+          onClick={() => openModal(null)} // ✅ FIX: Wrap in an anonymous function
+          className="w-full flex items-center justify-center gap-3 bg-[#0052CC] text-white p-4 rounded-2xl font-bold text-xs mb-6 hover:bg-[#0041a3] transition-all"
+        >
           <PlusCircle size={18} /> Add New Property
         </button>
         <div className="flex items-center gap-3 px-2">

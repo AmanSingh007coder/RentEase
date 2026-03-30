@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import ExitProcess from "@/models/ExitProcess";
-import Property from "@/models/Property"; // ❗ CRITICAL: Must be imported for populate
+import Property from "@/models/Property"; 
 import User from "@/models/User";         
 import Inspection from "@/models/Inspection"; 
 
@@ -13,42 +13,55 @@ export async function GET(request: Request) {
 
     if (!exitId) return NextResponse.json({ error: "Missing exitId" }, { status: 400 });
 
-    // 1. Fetch Exit and Populate the full Property object
+    // 1. Fetch Exit and Populate details
     const exit = await ExitProcess.findById(exitId)
       .populate("propertyId")
       .populate("tenantId");
 
     if (!exit) return NextResponse.json({ error: "Exit record not found" }, { status: 404 });
 
-    const propertyObj = exit.propertyId; // This is now the full property document
+    const propertyObj = exit.propertyId;
 
-    // 2. Fetch Move-In Baseline from Inspection Collection
+    // 2. Fetch Move-In Baseline
     const moveInInspection = await Inspection.findOne({ 
       propertyId: propertyObj._id,
       type: "move-in" 
     }).sort({ createdAt: -1 });
 
+    // Ensure we have arrays to map over
     const baselineImages = moveInInspection?.images || propertyObj?.images || [];
     const tenantProofImages = exit.moveOutPhotos || [];
 
-    // 3. Create Comparison Grid
-    const allCategories = Array.from(new Set([
-      ...baselineImages.map((img: any) => img.category || "General"),
-      ...tenantProofImages.map((img: any) => img.area || "General")
-    ]));
+    /**
+     * ✅ THE FIX: INDEX-BASED MAPPING
+     * Instead of creating a Set of categories (which collapses duplicates),
+     * we map through the baseline images by their position (index).
+     */
+    const comparisonGrid = baselineImages.map((baselineImg: any, index: number) => {
+      // Find the corresponding move-out photo at the EXACT same position
+      const proofImg = tenantProofImages[index];
 
-    const comparisonGrid = allCategories.map(cat => {
-      const baseline = baselineImages.find((img: any) => (img.category || "General") === cat);
-      const proof = tenantProofImages.find((img: any) => (img.area || "General") === cat);
       return {
-        area: cat,
-        baselineUrl: baseline?.url || null,
-        proofUrl: proof?.url || null
+        // Fallback to "Area X" if category is missing or duplicated
+        area: baselineImg.category || `Area ${index + 1}`, 
+        baselineUrl: baselineImg.url || null,
+        // Match the proof by index so Row 1 Baseline matches Row 1 Proof
+        proofUrl: proofImg?.url || null 
       };
     });
 
+    // 3. Optional: Handle extra photos if tenant uploaded more than the baseline
+    if (tenantProofImages.length > baselineImages.length) {
+       for (let i = baselineImages.length; i < tenantProofImages.length; i++) {
+         comparisonGrid.push({
+           area: tenantProofImages[i].area || `Extra Photo ${i + 1}`,
+           baselineUrl: null,
+           proofUrl: tenantProofImages[i].url
+         });
+       }
+    }
+
     // 4. Return the data
-    // We send 'property' explicitly so the frontend can find result.property.securityDeposit
     return NextResponse.json({ 
       exit, 
       comparisonGrid, 

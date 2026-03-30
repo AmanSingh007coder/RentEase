@@ -9,39 +9,50 @@ export async function PUT(request: Request) {
     await connectToDatabase();
     const { inspectionId, action, feedback } = await request.json();
 
-    // 1. Update the Inspection Status
+    // 1. Logic: If verify, set status to verified; otherwise rejected
     const status = action === "verify" ? "verified" : "rejected";
+    
     const updatedInspection = await Inspection.findByIdAndUpdate(
       inspectionId,
-      { status, ownerFeedback: feedback || "" },
+      { 
+        status, 
+        ownerFeedback: feedback || "",
+        verifiedAt: action === "verify" ? new Date() : null 
+      },
       { new: true }
     );
 
     if (!updatedInspection) {
-      return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+      return NextResponse.json({ error: "Inspection Record not found" }, { status: 404 });
     }
 
-    // 2. If verified, update the property phase
+    // 2. Sync Property State
+    // This allows the owner to see at a glance that the property is "Audited"
     if (action === "verify") {
       await Property.findByIdAndUpdate(updatedInspection.propertyId, {
-        "inspectionStatus.moveIn": "verified" 
+        "status": "occupied" // Ensure it's officially marked active
       });
     }
 
-    // 3. 🔔 NOTIFY TENANT: Log activity for Aman
+    // 3. 🔔 NOTIFY TENANT
+    // This alert will show up in the tenant's Activity section
     await logActivity({
       propertyId: updatedInspection.propertyId,
-      recipientId: updatedInspection.tenantId, // Notification for Aman
-      title: action === "verify" ? "Digital Witness Locked" : "Retake Requested",
+      recipientId: updatedInspection.tenantId, 
+      title: action === "verify" ? "Dashboard Unlocked 🔓" : "Audit Retake Required 📸",
       desc: action === "verify" 
-        ? "Mr. Gupta has verified and cryptographically locked your move-in evidence." 
-        : `Mr. Gupta requested a retake: ${feedback || "Photos were unclear."}`,
-      category: action === "verify" ? "legal" : "maintenance"
+        ? "Your move-in evidence is verified. Payments, Maintenance, and Exit portals are now active." 
+        : `Verification failed. Feedback: ${feedback || "Photos were unclear. Please retake."}`,
+      category: action === "verify" ? "legal" : "system"
     });
 
-    return NextResponse.json({ message: `Inspection ${status}`, updatedInspection }, { status: 200 });
+    return NextResponse.json({ 
+      message: `Vault ${status}`, 
+      status: updatedInspection.status 
+    }, { status: 200 });
+
   } catch (error: any) {
     console.error("ACTION_API_ERROR:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Vault Action Failed" }, { status: 500 });
   }
 }
