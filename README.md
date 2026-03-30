@@ -5,7 +5,6 @@
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-7.0-green)](https://www.mongodb.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -383,7 +382,7 @@ npm run test:coverage
 
 ## 🗺️ Roadmap
 
-### Phase 1 (Current) ✅
+### Phase 1 (Current) 
 - [x] User authentication (Firebase + bcrypt)
 - [x] Property management (CRUD)
 - [x] Move-in/move-out inspections
@@ -393,19 +392,13 @@ npm run test:coverage
 - [x] Residency Vault (archived profiles)
 - [x] PDF certificate generation
 
-### Phase 2 (Q2 2025) 🚧
+### Phase 2 :
 - [ ] **Payment Gateway Integration** (Razorpay/Stripe)
 - [ ] **JWT-based sessions** (replace Firebase tokens)
 - [ ] **Dispute resolution module** (third-party mediation)
 - [ ] **Multi-tenant support** (flatmates with role hierarchy)
 - [ ] **WhatsApp bot** (automated reminders)
 - [ ] **Push notifications** (PWA service workers)
-
-### Phase 3 (Future) 🔮
-- [ ] **AI damage detection** (computer vision for move-out photos)
-- [ ] **Legal template library** (state-specific rental agreements)
-- [ ] **Credit score integration** (tenant rental history API)
-- [ ] **Marketplace** (connect verified service providers)
 
 ---
 
@@ -468,7 +461,7 @@ Building RentEase taught me:
 
 **Aman Kumar Singh**  
 📧 Email: amansighrajput9005@gmail.com  
-🔗 LinkedIn: [linkedin.com/in/yourprofile](https://www.linkedin.com/in/aman-kumar-singh-be/)  
+🔗 LinkedIn: [Aman Kumar Singh](https://www.linkedin.com/in/aman-kumar-singh-be/)  
 
 ---
 
