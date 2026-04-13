@@ -23,26 +23,23 @@ export default function LoginPage() {
         body: JSON.stringify(formData),
       });
       const data = await res.json();
+      
       if (res.ok) {
         localStorage.setItem("userEmail", data.user.email);
         localStorage.setItem("userId", data.user.id);
 
-        // ✅ UPDATED DECISION LOGIC FOR ARCHIVED & NEW USERS
+        // ✅ SIMPLIFIED REDIRECTION LOGIC
+        // The Tenant Dashboard now handles "Case A" (New/Archived) and "Case B" (Active)
         if (data.user.role === "pending") {
           router.push("/role-selection");
         } else if (data.user.role === "owner") {
           router.push("/dashboard-owner");
         } else if (data.user.role === "tenant") {
-          // If they have a property linked but haven't paid, send to payment
-          if (data.user.propertyId && !data.user.isOnboarded) {
-            router.push("/onboarding/payment");
-          } else {
-            // Otherwise (No property OR Fully onboarded), send to Dashboard
-            // The Dashboard now handles showing "Welcome Home" vs "Legacy Vault".
-            router.push("/dashboard-tenant");
-          }
+          router.push("/dashboard-tenant"); 
         }
-      } else alert(data.error);
+      } else {
+        alert(data.error);
+      }
     } catch (err) {
       alert("Login failed.");
     } finally {
@@ -69,17 +66,13 @@ export default function LoginPage() {
         localStorage.setItem("userEmail", data.user.email);
         localStorage.setItem("userId", data.user.id);
 
-        // ✅ UPDATED DECISION LOGIC FOR ARCHIVED & NEW USERS
+        // ✅ SIMPLIFIED REDIRECTION LOGIC
         if (data.user.role === "pending") {
           router.push("/role-selection");
         } else if (data.user.role === "owner") {
           router.push("/dashboard-owner");
         } else if (data.user.role === "tenant") {
-          if (data.user.propertyId && !data.user.isOnboarded) {
-            router.push("/onboarding/payment");
-          } else {
-            router.push("/dashboard-tenant");
-          }
+          router.push("/dashboard-tenant");
         }
       } else {
         alert(data.error || "Google authentication failed.");
@@ -89,7 +82,7 @@ export default function LoginPage() {
       alert("Google Sign-In failed.");
     }
   };
-
+  
   return (
     <div className="min-h-screen bg-white grid lg:grid-cols-2 overflow-hidden relative">
       <div className="hidden lg:block relative">

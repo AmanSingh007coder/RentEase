@@ -12,39 +12,33 @@ const ExitProcessSchema = new mongoose.Schema({
   status: { 
     type: String, 
     enum: [
-          "notice_served", 
-          "notice_rescheduled", // Added
-          "notice_accepted",    // Added
-          "photos_submitted", 
-          "physical_inspection_required", 
-          "physical_inspection_done", 
-          "inspection_completed", 
-          "settled", 
-          "archived"
-        ],
+      "notice_served", 
+      "notice_rescheduled", 
+      "notice_accepted",
+      "photos_submitted", 
+      "physical_inspection_required", 
+      "physical_inspection_done", 
+      "inspection_completed", 
+      "settled", 
+      "disputed", // ✅ NEW STATUS
+      "archived"
+    ],
     default: "notice_served"
   },
 
-  moveOutPhotos: [{
-    area: String,
-    url: String,
-    comment: String
-  }],
+  // ✅ Store the tenant's dispute reason
+  tenantDisputeComment: { type: String, default: "" },
 
-  // --- Physical Inspection Details ---
+  moveOutPhotos: [{ area: String, url: String, comment: String }],
+
   inspectionDate: Date,
   inspectorName: String,
   inspectorContact: String,
   physicalAuditNotes: String,
 
-  // --- Financial Reconciliation ---
-  deductions: [{
-    item: String,
-    amount: Number,
-    reason: String
-  }],
+  deductions: [{ item: String, amount: Number, reason: String }],
   finalRefundAmount: { type: Number, default: 0 },
-  isTenantSatisfied: { type: Boolean, default: false }, // Final handshake
+  isTenantSatisfied: { type: Boolean, default: false }, 
   
   createdAt: { type: Date, default: Date.now }
 });

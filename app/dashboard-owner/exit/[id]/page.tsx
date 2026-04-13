@@ -30,36 +30,18 @@ export default function OwnerExitReview({ params }: { params: Promise<{ id: stri
     loadComparison();
   }, [exitId]);
 
-  /** * ✅ BULLETPROOF DATE COMPARISON
-   * Converts a date to a number: March 31, 2026 -> 20260331
-   * This ignores timezones, minutes, and UTC offsets completely.
-   */
+  // ✅ DATE SCORE LOGIC
   const getDateScore = (dateInput: any) => {
     if (!dateInput) return 0;
     const d = new Date(dateInput);
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const day = d.getDate();
-    return (y * 10000) + (m * 100) + day;
+    return (d.getFullYear() * 10000) + ((d.getMonth() + 1) * 100) + d.getDate();
   };
 
   const todayScore = getDateScore(new Date());
   const moveOutScore = data?.exit?.moveOutDate ? getDateScore(data.exit.moveOutDate) : 99999999;
-  
-  // The button unlocks if today is the same day or later
   const isPastMoveOut = todayScore >= moveOutScore;
 
-  // DEBUG LOG: Open your browser console (F12) to see these numbers
-  console.log("Date Check:", { todayScore, moveOutScore, isPastMoveOut });
-
   const handleDecision = async (status: string) => {
-    if (status === "physical_inspection_required") {
-      if (!form.inspectionDate || !form.inspectorName || !form.inspectorContact) {
-        alert("Please provide all inspection details.");
-        return;
-      }
-    }
-
     setIsProcessing(true);
     try {
       const res = await fetch("/api/exit/submit-decision", {
@@ -71,12 +53,7 @@ export default function OwnerExitReview({ params }: { params: Promise<{ id: stri
     } finally { setIsProcessing(false); }
   };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#F9FAFB]">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Comparing Evidence Vaults...</p>
-    </div>
-  );
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
   return (
     <div className="p-10 max-w-7xl mx-auto pb-40">
@@ -84,37 +61,39 @@ export default function OwnerExitReview({ params }: { params: Promise<{ id: stri
         <div>
           <div className="flex items-center gap-2 text-blue-600 mb-2">
             <ShieldCheck size={18} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Audit Reconciliation Mode</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Audit Mode</span>
           </div>
           <h1 className="text-4xl font-black text-[#1F2937] tracking-tight">Condition Review</h1>
-          <p className="text-gray-400 mt-2 font-medium italic">Comparing move-out proof against original move-in baseline.</p>
+          <p className="text-gray-400 mt-2 font-medium italic">Final comparison before financial settlement.</p>
         </div>
 
         <div className="flex gap-4">
+          {/* ✅ CONDITION 1: Photos just submitted, need approval or physical flag */}
           {data?.exit?.status === "photos_submitted" ? (
             <>
-              <button onClick={() => setShowPhysicalForm(true)} className="px-8 py-5 bg-orange-50 text-orange-600 rounded-[24px] font-bold text-xs flex items-center gap-3 border border-orange-100 hover:bg-orange-100 transition-all shadow-sm">
+              <button onClick={() => setShowPhysicalForm(true)} className="px-8 py-5 bg-orange-50 text-orange-600 rounded-[24px] font-bold text-xs flex items-center gap-3 border border-orange-100 shadow-sm">
                 <AlertTriangle size={18} /> Flag for Physical Audit
               </button>
               <button onClick={() => handleDecision("inspection_completed")} className="px-8 py-5 bg-[#1F2937] text-white rounded-[24px] font-bold text-xs flex items-center gap-3 shadow-xl hover:bg-black transition-all">
                 <CheckCircle size={18} /> Approve Condition
               </button>
             </>
-          ) : data?.exit?.status === "physical_inspection_done" ? (
+          ) : 
+          /* ✅ CONDITION 2: Condition is approved (either via web or physical), show Settlement button */
+          ["physical_inspection_done", "inspection_completed", "disputed"].includes(data?.exit?.status) ? (
             <button 
               disabled={!isPastMoveOut}
               onClick={() => window.location.href = `/dashboard-owner/exit/${exitId}/settlement`}
               className={`px-8 py-5 rounded-[24px] font-bold text-xs flex items-center gap-3 shadow-xl transition-all ${
-                isPastMoveOut 
-                ? "bg-emerald-500 text-white shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95" 
-                : "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                isPastMoveOut ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-gray-100 text-gray-400 cursor-not-allowed border"
               }`}
             >
               <DollarSign size={18} /> 
               {isPastMoveOut ? "Finalize Settlement" : `Unlocks on ${new Date(data.exit.moveOutDate).toLocaleDateString()}`}
             </button>
           ) : (
-            <div className="px-6 py-4 bg-white border border-gray-100 text-gray-400 rounded-2xl text-[10px] font-black uppercase tracking-widest">
+            /* FALLBACK: Show current stage */
+            <div className="px-6 py-4 bg-gray-50 text-gray-400 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-gray-100">
               Stage: {data?.exit?.status.replace(/_/g, " ")}
             </div>
           )}
