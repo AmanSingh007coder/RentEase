@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Loader2, CheckCircle2, History, PlusCircle, 
-  Home, FileText, Download, ShieldCheck, Zap, Clock, ArrowRight
+  Home, FileText, Download, ShieldCheck, Zap, Clock, ArrowRight, ShieldAlert
 } from "lucide-react";
 import Link from "next/link";
 

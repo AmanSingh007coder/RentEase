@@ -4,14 +4,24 @@ import connectToDatabase from "@/lib/mongodb";
 import Property from "@/models/Property";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenantId");
+  try {
+    const { searchParams } = new URL(request.url);
+    const tenantId = searchParams.get("tenantId");
 
-  await connectToDatabase();
-  
-  // Find the property where this tenantId exists in the tenants array
-  // .populate("ownerId") fetches the landlord's real name and email
-  const property = await Property.findOne({ tenants: tenantId }).populate("ownerId");
+    if (!tenantId) {
+      return NextResponse.json({ error: "Tenant ID is required" }, { status: 400 });
+    }
 
-  return NextResponse.json({ property });
+    await connectToDatabase();
+    
+    // ✅ FIX: Changed 'tenants' (plural) to 'tenantId' (singular) 
+    // to match your database dump exactly.
+    const property = await Property.findOne({ tenantId: tenantId }).populate("ownerId");
+
+    console.log("Database Search Result:", property); // Check your terminal to see if it found it!
+
+    return NextResponse.json({ property });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

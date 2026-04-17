@@ -55,36 +55,33 @@ export default function FinalSettlement({ params }: { params: Promise<{ id: stri
     setDeductions(updated);
   };
 
-  const handleFinalize = async () => {
-    if (finalRefund < 0) {
-      alert("Error: Deductions exceed total deposit amount.");
-      return;
-    }
+  // Inside handleFinalize function in FinalSettlement
+const handleFinalize = async () => {
+  if (finalRefund < 0) return alert("Deductions exceed deposit.");
+  
+  setIsPaying(true);
 
-    setIsPaying(true);
-    
-    // Simulate Banking Handshake Delay
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/exit/finalize-settlement", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            exitId, 
-            deductions: deductions.filter(d => d.item !== ""), 
-            finalRefundAmount: finalRefund 
-          })
-        });
-        
-        if (res.ok) {
-          // This marks the financial end. Tenant must now click 'Satisfied' to archive.
-          window.location.href = "/dashboard-owner/exit";
-        }
-      } catch (err) {
-        setIsPaying(false);
-      }
-    }, 3500);
-  };
+  // In a real production app, you would call RazorpayX Payouts here.
+  // For the MVP, we simulate the "Banking Handshake" but log a real settled event.
+  setTimeout(async () => {
+    try {
+      const res = await fetch("/api/exit/finalize-settlement", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          exitId, 
+          deductions: deductions.filter(d => d.item !== ""), 
+          finalRefundAmount: finalRefund,
+          payoutStatus: "released" // Logic to show on tenant side
+        })
+      });
+      
+      if (res.ok) window.location.href = "/dashboard-owner/exit";
+    } catch (err) {
+      setIsPaying(false);
+    }
+  }, 3000);
+};
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
