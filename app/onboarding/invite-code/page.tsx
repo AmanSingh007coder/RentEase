@@ -46,7 +46,7 @@ export default function InviteCodePage() {
           })
         );
         // Redirect to payment with property details
-        router.push("/onboarding/payment");
+        router.push("/onboarding/agreement");
       } else {
         setError(data.error || "Invalid invite code. Please check and try again.");
       }

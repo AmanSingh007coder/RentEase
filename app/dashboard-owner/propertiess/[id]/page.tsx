@@ -2,29 +2,32 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   MapPin, IndianRupee, ShieldCheck, ArrowLeft, 
-  Copy, Check, Share2, Building2, Calendar, User, Mail, History, UserX 
+  Copy, Check, Share2, Building2, Calendar, User, Mail, History, UserX,
+  FileText, PenTool, CheckCircle2
 } from "lucide-react";
+import SignaturePad from "../../../components/SignaturePad"; // Ensure this path is correct
 
 export default function PropertyDetails() {
   const { id } = useParams();
   const router = useRouter();
   const [property, setProperty] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [isSealing, setIsSealing] = useState(false);
 
   useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        const res = await fetch(`/api/properties/get-single?id=${id}`);
-        const data = await res.json();
-        // API must use .populate("tenantId")
-        if (res.ok) setProperty(data.property);
-      } catch (err) { console.error("Fetch error:", err); }
-    };
     fetchDetails();
   }, [id]);
+
+  const fetchDetails = async () => {
+    try {
+      const res = await fetch(`/api/properties/get-single?id=${id}`);
+      const data = await res.json();
+      if (res.ok) setProperty(data.property);
+    } catch (err) { console.error("Fetch error:", err); }
+  };
 
   const copyCode = () => {
     navigator.clipboard.writeText(property.inviteCode);
@@ -37,7 +40,27 @@ export default function PropertyDetails() {
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   };
 
+  const handleOwnerSign = async (signatureImg: string) => {
+    setIsSealing(true);
+    try {
+      const res = await fetch("/api/onboarding/owner-sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId: property._id, signatureImg })
+      });
+      if (res.ok) {
+        await fetchDetails(); // Refresh to show the sealed status
+      }
+    } catch (err) {
+      console.error("Signing error:", err);
+    } finally {
+      setIsSealing(false);
+    }
+  };
+
   if (!property) return <div className="h-screen flex items-center justify-center font-black uppercase text-[10px] tracking-widest text-gray-300">Accessing Vault...</div>;
+
+  const isAgreementFullySealed = property.agreement?.isSignedByTenant && property.agreement?.isSignedByOwner;
 
   return (
     <div className="p-6 md:p-12 lg:p-16 max-w-7xl mx-auto">
@@ -53,28 +76,74 @@ export default function PropertyDetails() {
               <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
                 property.status === 'vacant' ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-600'
               }`}>{property.status.replace("_", " ")}</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                <Calendar size={12} /> Managed Since {new Date(property.createdAt).toLocaleDateString()}
-              </span>
+              
+              {isAgreementFullySealed && (
+                <span className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border border-blue-100">
+                  <ShieldCheck size={14} /> Legally Sealed
+                </span>
+              )}
             </div>
             <h1 className="text-4xl md:text-5xl font-black text-[#1F2937] leading-[1.1] tracking-tight">{property.address}</h1>
           </header>
 
           {/* SIDEBAR CARD: RESIDENT VS INVITE */}
           {property.tenantId ? (
-             <div className="bg-emerald-50 border border-emerald-100 p-10 rounded-[48px] relative overflow-hidden">
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-emerald-500 shadow-sm"><User size={28}/></div>
-                    <div>
-                        <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Current Occupant</p>
-                        <h3 className="text-2xl font-black text-emerald-900">{property.tenantId.name}</h3>
+             <div className="space-y-6">
+               <div className="bg-emerald-50 border border-emerald-100 p-10 rounded-[48px] relative overflow-hidden">
+                  <div className="flex items-center gap-4 mb-8">
+                      <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-emerald-500 shadow-sm"><User size={28}/></div>
+                      <div>
+                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Current Occupant</p>
+                          <h3 className="text-2xl font-black text-emerald-900">{property.tenantId.name}</h3>
+                      </div>
+                  </div>
+                  <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-sm font-medium text-emerald-800/60"><Mail size={16}/> {property.tenantId.email}</div>
+                      <div className="flex items-center gap-3 text-sm font-medium text-emerald-800/60"><IndianRupee size={16}/> ₹{property.rentAmount.toLocaleString()}/mo</div>
+                  </div>
+                  <div className="absolute top-[-10%] right-[-10%] w-32 h-32 bg-emerald-200/40 blur-[50px] rounded-full" />
+               </div>
+
+               {/* ✅ OWNER SIGNATURE SECTION (Action Required) */}
+               {property.agreement?.isSignedByTenant && !property.agreement?.isSignedByOwner && (
+                 <motion.div 
+                   initial={{ opacity: 0, scale: 0.9 }} 
+                   animate={{ opacity: 1, scale: 1 }}
+                   className="p-8 bg-blue-50 border-2 border-dashed border-blue-200 rounded-[48px] space-y-6"
+                 >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                        <PenTool size={22} />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-black text-blue-900">Seal Agreement</h4>
+                        <p className="text-xs text-blue-500 font-bold uppercase tracking-wider">Tenant has signed • Action Required</p>
+                      </div>
                     </div>
-                </div>
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-sm font-medium text-emerald-800/60"><Mail size={16}/> {property.tenantId.email}</div>
-                    <div className="flex items-center gap-3 text-sm font-medium text-emerald-800/60"><IndianRupee size={16}/> ₹{property.rentAmount.toLocaleString()}/mo</div>
-                </div>
-                <div className="absolute top-[-10%] right-[-10%] w-32 h-32 bg-emerald-200/40 blur-[50px] rounded-full" />
+                    
+                    <SignaturePad onSave={handleOwnerSign} />
+                    
+                    <p className="text-[9px] text-blue-400 text-center font-bold uppercase tracking-tighter">
+                      Counter-signing will finalize the blockchain hash and lock the legal vault.
+                    </p>
+                 </motion.div>
+               )}
+
+               {/* ✅ SHOW SEALED CONFIRMATION */}
+               {isAgreementFullySealed && (
+                 <div className="p-8 bg-white border border-gray-100 rounded-[40px] flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-4">
+                      <CheckCircle2 size={24} className="text-emerald-500" />
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-gray-400">Legal Status</p>
+                        <p className="text-sm font-bold text-gray-800">Agreement Fully Executed</p>
+                      </div>
+                    </div>
+                    <button className="p-4 text-blue-600 bg-blue-50 rounded-2xl hover:bg-blue-600 hover:text-white transition-all">
+                      <FileText size={20} />
+                    </button>
+                 </div>
+               )}
              </div>
           ) : (
             <div className="bg-[#1F2937] p-10 rounded-[48px] text-white shadow-2xl relative overflow-hidden">
@@ -85,7 +154,7 @@ export default function PropertyDetails() {
             </div>
           )}
 
-          {/* ✅ OCCUPANCY HISTORY SECTION */}
+          {/* OCCUPANCY HISTORY SECTION */}
           <section className="space-y-6 pt-4">
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] ml-2 flex items-center gap-2">
                 <History size={14}/> Residency History

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { 
   LayoutGrid, Building2, Wrench, ShieldCheck, IndianRupee, 
-  Settings, LogOut, PlusCircle, X, Plus 
+  Settings, LogOut, PlusCircle, X, Plus, ShieldAlert, Clock
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PropertyProvider, useProperty } from "../context/PropertyContext";
@@ -33,15 +33,19 @@ function ModalManager() {
     rooms: "1",
     furnishing: "unfurnished",
     guidelines: "",
+    // ✅ SMART RULES FIELDS
+    gracePeriodDays: "7",
+    repairThreshold: "500",
+    lockInMonths: "11",
+    noticePeriodDays: "30",
     images: [] as string[]
   });
 
-
-  // ✅ ADD THIS: Sync form with the property being edited
 useEffect(() => {
   if (isModalOpen && editingProperty) {
-    // ✅ Logging to verify data is reaching the modal
-    console.log("Editing Mode Active:", editingProperty);
+    // ✅ Change the log to be specific, or remove it. 
+    // Logging the whole object can sometimes trigger key-reading errors in Next.js 15.
+    console.log("Editing Asset:", editingProperty.address); 
 
     setPropertyData({
       address: editingProperty.address || "",
@@ -52,69 +56,79 @@ useEffect(() => {
       guidelines: Array.isArray(editingProperty.guidelines) 
         ? editingProperty.guidelines.join(", ") 
         : editingProperty.guidelines || "",
-      images: [] // We don't edit images in this step to save bandwidth
+      gracePeriodDays: editingProperty.maintenanceRules?.gracePeriodDays?.toString() || "7",
+      repairThreshold: editingProperty.maintenanceRules?.repairThreshold?.toString() || "500",
+      lockInMonths: editingProperty.exitPolicy?.lockInMonths?.toString() || "11",
+      noticePeriodDays: editingProperty.exitPolicy?.noticePeriodDays?.toString() || "30",
+      images: [] 
     });
-    setStep(1); // Ensure we start at Step 1 for edits
+    setStep(1); 
   } else if (isModalOpen && !editingProperty) {
-    // Reset for fresh "Add"
-    setPropertyData({ address: "", rentAmount: "", depositAmount: "", rooms: "1", furnishing: "unfurnished", guidelines: "", images: [] });
+    setPropertyData({ 
+      address: "", rentAmount: "", depositAmount: "", rooms: "1", 
+      furnishing: "unfurnished", guidelines: "", 
+      gracePeriodDays: "7", repairThreshold: "500", 
+      lockInMonths: "11", noticePeriodDays: "30", images: [] 
+    });
     setStep(1);
   }
 }, [editingProperty, isModalOpen]);
 
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const isEditing = !!(editingProperty && editingProperty._id); 
+      const endpoint = isEditing ? "/api/properties/update" : "/api/properties/create";
+      const method = isEditing ? "PUT" : "POST";
 
+      // ✅ Build Payload with Smart Rules structure
+      const payload = {
+        address: propertyData.address,
+        rentAmount: Number(propertyData.rentAmount),
+        depositAmount: Number(propertyData.depositAmount),
+        ownerId: localStorage.getItem("userId"),
+        roomDetails: { 
+          rooms: Number(propertyData.rooms), 
+          furnishing: propertyData.furnishing 
+        },
+        // ✅ SMART CONTRACT ENFORCEMENT FIELDS
+        maintenanceRules: {
+          gracePeriodDays: Number(propertyData.gracePeriodDays),
+          repairThreshold: Number(propertyData.repairThreshold)
+        },
+        exitPolicy: {
+          lockInMonths: Number(propertyData.lockInMonths),
+          noticePeriodDays: Number(propertyData.noticePeriodDays)
+        },
+        guidelines: typeof propertyData.guidelines === 'string' 
+          ? propertyData.guidelines.split(",").map(s => s.trim()) 
+          : propertyData.guidelines,
+        images: propertyData.images || [],
+        ...(isEditing && { propertyId: editingProperty._id }) 
+      };
 
-  // ✅ UPDATE THIS: Handle both Create and Update
-const handleSubmit = async () => {
-  setLoading(true);
-  try {
-    // 1. Determine if this is a NEW property or an EDIT
-    const isEditing = !!(editingProperty && editingProperty._id); 
-    const endpoint = isEditing ? "/api/properties/update" : "/api/properties/create";
-    const method = isEditing ? "PUT" : "POST";
+      const res = await fetch(endpoint, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    // 2. Build the Clean Payload
-    const payload = {
-      address: propertyData.address,
-      rentAmount: Number(propertyData.rentAmount),
-      depositAmount: Number(propertyData.depositAmount),
-      ownerId: localStorage.getItem("userId"),
-      roomDetails: { 
-        rooms: Number(propertyData.rooms), 
-        furnishing: propertyData.furnishing 
-      },
-      guidelines: typeof propertyData.guidelines === 'string' 
-        ? propertyData.guidelines.split(",").map(s => s.trim()) 
-        : propertyData.guidelines,
-      images: propertyData.images || [],
-      
-      // ✅ CRITICAL FIX: Only include propertyId if we are actually editing
-      ...(isEditing && { propertyId: editingProperty._id }) 
-    };
+      const data = await res.json();
 
-    const res = await fetch(endpoint, {
-      method: method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-
-    if (res.ok) {
-      alert(isEditing ? "Asset Updated successfully!" : "New Asset Created!");
-      closeModal();
-      window.location.reload(); // Refresh the portfolio list
-    } else {
-      // This will now catch the "Property ID required" error if something goes wrong
-      alert(data.error || "Save failed. Please check all fields.");
+      if (res.ok) {
+        alert(isEditing ? "Asset Updated successfully!" : "New Asset Created!");
+        closeModal();
+        window.location.reload(); 
+      } else {
+        alert(data.error || "Save failed.");
+      }
+    } catch (err) {
+      console.error("SUBMIT_ERROR:", err);
+      alert("Vault connection failed.");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("SUBMIT_ERROR:", err);
-    alert("Vault connection failed. Check your network.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -125,26 +139,6 @@ const handleSubmit = async () => {
       };
       reader.readAsDataURL(file);
     });
-  };
-
-  const handleCreateProperty = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/properties/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...propertyData,
-          ownerId: localStorage.getItem("userId"),
-          roomDetails: { rooms: propertyData.rooms, furnishing: propertyData.furnishing }
-        }),
-      });
-      if (res.ok) {
-        closeModal();
-        window.location.reload();
-      }
-    } catch (err) { alert("Failed to create property"); }
-    finally { setLoading(false); }
   };
 
   return (
@@ -162,42 +156,69 @@ const handleSubmit = async () => {
               </div>
 
               {step === 1 ? (
-                <div className="space-y-6">
-                  <h2 className="text-3xl font-bold text-[#1F2937]">Basic Details</h2>
-                  <input type="text" value={propertyData.address} placeholder="Property Address" className="w-full p-5 bg-gray-50 rounded-2xl outline-none border border-gray-100 focus:border-[#0052CC] text-gray-800" onChange={e => setPropertyData({...propertyData, address: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <input type="number" value={propertyData.rentAmount} placeholder="Rent (₹)" className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-gray-800" onChange={e => setPropertyData({...propertyData, rentAmount: e.target.value})} />
-                    <input type="number" value={propertyData.depositAmount} placeholder="Deposit (₹)" className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-gray-800" onChange={e => setPropertyData({...propertyData, depositAmount: e.target.value})} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <select value={propertyData.rooms} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-gray-800" onChange={e => setPropertyData({...propertyData, rooms: e.target.value})}>
-                      <option value="1">1 BHK</option>
-                      <option value="2">2 BHK</option>
-                      <option value="3">3 BHK</option>
-                    </select>
-                    <select value={propertyData.furnishing} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-gray-800" onChange={e => setPropertyData({...propertyData, furnishing: e.target.value})}>
-                      <option value="unfurnished">Unfurnished</option>
-                      <option value="semi">Semi-Furnished</option>
-                      <option value="fully">Fully-Furnished</option>
-                    </select>
-                  </div>
-                      <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 ml-2">Amenities & Guidelines</label>
-                          <textarea 
-                            value={propertyData.guidelines} placeholder="e.g. WiFi included, No pets, Smoking allowed in balcony only..."
-                            rows={3}
-                            className="w-full p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none focus:border-[#0052CC] text-gray-800 resize-none transition-all"
-                            onChange={e => setPropertyData({...propertyData, guidelines: e.target.value})}
-                          />
+                <div className="space-y-8">
+                  <h2 className="text-3xl font-black text-[#1F2937] tracking-tight">Property Asset Details</h2>
+                  
+                  <div className="space-y-4">
+                    <input type="text" value={propertyData.address} placeholder="Full Property Address" className="w-full p-5 bg-gray-50 rounded-2xl outline-none border border-gray-100 focus:border-[#0052CC] text-gray-800 font-bold" onChange={e => setPropertyData({...propertyData, address: e.target.value})} />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-2">Monthly Rent (₹)</label>
+                        <input type="number" value={propertyData.rentAmount} className="w-full p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none font-black text-emerald-600" onChange={e => setPropertyData({...propertyData, rentAmount: e.target.value})} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-2">Security Deposit (₹)</label>
+                        <input type="number" value={propertyData.depositAmount} className="w-full p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none font-black text-blue-600" onChange={e => setPropertyData({...propertyData, depositAmount: e.target.value})} />
+                      </div>
+                    </div>
+
+                    {/* ✅ SMART RULES UI SECTION */}
+                    <div className="pt-6 border-t border-gray-100">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0052CC] mb-6 flex items-center gap-2">
+                        <ShieldCheck size={14} /> Smart Contract Enforcement
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold uppercase text-gray-400 ml-2">Maintenance Floor (₹)</label>
+                          <input type="number" value={propertyData.repairThreshold} className="w-full p-4 bg-gray-50 rounded-xl border border-gray-100 outline-none text-xs font-bold" onChange={e => setPropertyData({...propertyData, repairThreshold: e.target.value})} />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold uppercase text-gray-400 ml-2">Lock-In (Months)</label>
+                          <input type="number" value={propertyData.lockInMonths} className="w-full p-4 bg-gray-50 rounded-xl border border-gray-100 outline-none text-xs font-bold" onChange={e => setPropertyData({...propertyData, lockInMonths: e.target.value})} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <select value={propertyData.rooms} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-sm font-bold" onChange={e => setPropertyData({...propertyData, rooms: e.target.value})}>
+                        <option value="1">1 BHK</option>
+                        <option value="2">2 BHK</option>
+                        <option value="3">3 BHK</option>
+                      </select>
+                      <select value={propertyData.furnishing} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-sm font-bold" onChange={e => setPropertyData({...propertyData, furnishing: e.target.value})}>
+                        <option value="unfurnished">Unfurnished</option>
+                        <option value="semi">Semi-Furnished</option>
+                        <option value="fully">Fully-Furnished</option>
+                      </select>
+                    </div>
+                    
+                    <textarea 
+                      value={propertyData.guidelines} placeholder="Special Guidelines (comma separated)..."
+                      rows={3}
+                      className="w-full p-5 bg-gray-50 rounded-2xl border border-gray-100 outline-none text-sm font-medium resize-none"
+                      onChange={e => setPropertyData({...propertyData, guidelines: e.target.value})}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <h2 className="text-3xl font-bold text-[#1F2937]">Upload Photos</h2>
+                  <h2 className="text-3xl font-black text-[#1F2937]">Vault Assets</h2>
+                  <p className="text-gray-400 text-sm">Upload high-resolution baseline photos for the inventory audit.</p>
                   <div className="grid grid-cols-3 gap-4">
-                    {propertyData.images.map((img, i) => <img key={i} src={img} className="aspect-square rounded-2xl object-cover border" />)}
-                    <label className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50">
-                      <Plus size={20} className="text-gray-400" />
+                    {propertyData.images.map((img, i) => <img key={i} src={img} className="aspect-square rounded-2xl object-cover border-2 border-white shadow-sm" />)}
+                    <label className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
+                      <Plus size={24} className="text-gray-300" />
                       <input type="file" multiple className="hidden" onChange={handleImage} />
                     </label>
                   </div>
@@ -205,9 +226,9 @@ const handleSubmit = async () => {
               )}
 
               <div className="mt-12 flex gap-4">
-                {step > 1 && <button onClick={() => setStep(1)} className="px-8 py-4 font-bold text-gray-400">Back</button>}
-                <button onClick={() => step === 1 ? setStep(2) : handleSubmit()} className="flex-1 bg-[#0052CC] text-white py-5 rounded-2xl font-bold">
-                  {loading ? "Syncing..." : step === 1 ? "Next" : "List Property"}
+                {step > 1 && <button onClick={() => setStep(1)} className="px-8 py-4 font-bold text-gray-400 hover:text-black">Back</button>}
+                <button onClick={() => step === 1 ? setStep(2) : handleSubmit()} className="flex-1 bg-[#1F2937] text-white py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-black transition-all">
+                  {loading ? "Syncing..." : step === 1 ? "Next Step" : "Initialize Asset"}
                 </button>
               </div>
             </div>
@@ -218,9 +239,9 @@ const handleSubmit = async () => {
   );
 }
 
-function Sidebar({ userName, openModal, pathname }: { userName: string, openModal: () => void, pathname: string }) {
+function Sidebar({ userName, openModal, pathname }: { userName: string, openModal: (p: any) => void, pathname: string }) {
   return (
-    <aside className="hidden md:flex w-72 bg-[#1F2937] flex-col justify-between p-6 fixed inset-y-0 left-0 z-50 rounded-r-[32px] shadow-2xl">
+    <aside className="hidden md:flex w-72 bg-[#1F2937] flex-col justify-between p-6 fixed inset-y-0 left-0 z-50 rounded-r-[40px] shadow-2xl">
       <div>
         <div className="mb-12 px-2">
           <Image src="/desk.png" alt="RentEase" width={150} height={40} className="brightness-200" />
@@ -239,14 +260,14 @@ function Sidebar({ userName, openModal, pathname }: { userName: string, openModa
       </div>
       <div className="pt-6 border-t border-white/10">
         <button 
-          onClick={() => openModal(null)} // ✅ FIX: Wrap in an anonymous function
-          className="w-full flex items-center justify-center gap-3 bg-[#0052CC] text-white p-4 rounded-2xl font-bold text-xs mb-6 hover:bg-[#0041a3] transition-all"
+          onClick={() => openModal(null)} 
+          className="w-full flex items-center justify-center gap-3 bg-[#0052CC] text-white p-4 rounded-2xl font-bold text-xs mb-6 hover:bg-[#0041a3] transition-all shadow-lg"
         >
           <PlusCircle size={18} /> Add New Property
         </button>
         <div className="flex items-center gap-3 px-2">
-          <div className="w-10 h-10 rounded-full bg-[#0052CC]/20 flex items-center justify-center font-bold text-white border border-white/10 uppercase">{userName.charAt(0)}</div>
-          <div><p className="text-sm font-bold text-white">{userName}</p><p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Landlord</p></div>
+          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center font-black text-white border border-white/10 uppercase">{userName.charAt(0)}</div>
+          <div><p className="text-sm font-bold text-white leading-none">{userName}</p><p className="text-[9px] text-gray-500 uppercase tracking-widest font-black mt-1">Portfolio Owner</p></div>
         </div>
       </div>
     </aside>
@@ -279,7 +300,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex">
       <Sidebar userName={user.name} openModal={openModal} pathname={pathname} />
-      <main className="flex-1 md:ml-72 min-h-screen">
+      <main className="flex-1 md:ml-72 min-h-screen relative">
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
       <ModalManager />
